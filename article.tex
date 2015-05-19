@@ -10,7 +10,7 @@
 
 \title{Cascaded Approximation of Gaussian Blur}
 \author{Vabishchevich Nikolay}
-\date{May 15, 2015}
+\date{May 19, 2015}
 \maketitle
 
 
@@ -388,7 +388,7 @@ small. Therefore final versions of rescale operators is
 For last task of approximating central gaussian shape I've decided to use generic 9-tap filter as
 the main workhorse. Under that name I imply even symmetric conservative convolutional filter of the
 following form
-\begin{equation}
+\begin{equation}\label{main}
     K_k = \left\{
         \begin{array}{ll}
             1 - \sum_{i=1}^4 C_i,& k = 0;\\
@@ -444,7 +444,7 @@ then the problem is to minimize
         \left\{1 - \sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right\}p(\varphi)\right]^2
         w(\varphi) d\varphi =
 \end{equation*}
-\begin{equation}
+\begin{equation}\label{lambda}
     \int_{-\pi}^\pi \left[g(\varphi) - p(\varphi) +
         p(\varphi)\sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right]^2 w(\varphi) d\varphi,
 \end{equation}
@@ -588,5 +588,154 @@ $\varphi = \pm\pi$ where the target gaussian is near zero anyway. Accurate appro
 effective rescale filter kernel concludes calculation of the main filter coefficients, and in the
 following section I study the task of choosing remaining parametrs $n$, $l$ and $m_i$.
 
+
+\section{Error estimation and mode selection}
+
+Value selection for integer parameters is quite straightforward: try different parameter sets,
+estimate error and choose best in some sense. Key process here is calculation of that estimate. One
+of the possible ways is to use mean square error (\ref{lambda}) from previous section but I use
+more accurate method.
+
+Combined effect of all stages of gaussian blur approximation can be written in generic form
+\begin{equation}
+    R_i = \sum_{j\in Z} K_{ij}F_j,
+\end{equation}
+where
+\begin{equation}
+    K_{ij} \approx G_{i-j} = \Gamma(\sigma^2;\, i - j) =
+        \frac1{\sqrt{2\pi\sigma^2}}\exp\left\{-\frac{(i - j)^2}{2\sigma^2}\right\}.
+\end{equation}
+Assuming that filter doesn't distort constant function (if $F_i = c$ then $R_i = c$) or
+alternatively
+\begin{equation}
+    \sum_{j\in Z} K_{ij} = 1,
+\end{equation}
+and source values lie between $0$ and $1$,
+\begin{equation}
+    0 \le F_i \le 1,
+\end{equation}
+we can calculate exact upper bound of error $E^{\max}_i = \sup_F |E_i|$, where
+\begin{equation}\label{E}
+    E_i = \sum_{j\in Z} [K_{ij} - G_{i-j}]F_j.
+\end{equation}
+Due to zero error in case of zero source function
+\begin{equation}
+    E^{\max}_i = \sup_F |E_i| = \max\{-\inf_F E_i,\; \sup_F E_i\}.
+\end{equation}
+To calculate maximum positive and negative error one can choose $F_j$ in such a way that sum from
+(\ref{E}) reduces to sum of only positive or negative terms,
+\begin{align}
+    \inf_F E_i &= \sum_{j\in Z, K_{ij} < G_{i-j}} [K_{ij} - G_{i-j}],\\
+    \sup_F E_i &= \sum_{j\in Z, K_{ij} > G_{i-j}} [K_{ij} - G_{i-j}].
+\end{align}
+It's easy to see that
+\begin{align}
+    \sup_F E_i + \inf_F E_i &= \sum_{j\in Z} [K_{ij} - G_{i-j}] = 1 - 1 = 0,\\
+    \sup_F E_i - \inf_F E_i &= \sum_{j\in Z} |K_{ij} - G_{i-j}|,
+\end{align}
+and
+\begin{equation}
+    E^{\max}_i = \max\{-\inf_F E_i,\; \sup_F E_i\} = \sup_F E_i =
+        \frac12\sum_{j\in Z} |K_{ij} - G_{i-j}|.
+\end{equation}
+That's the final form of error estimation I'll use later.
+
+Considerable experimentation shows that there is 3 types of main filter pattern worth exploring.
+Those are
+\begin{align}
+    m^\alpha_i &= \{1, 2, 3, 4\},\\
+    m^\beta_i  &= \{1, 2, 3, 5\},\\
+    m^\gamma_i &= \{1, 2, 4, 6\}.
+\end{align}
+I call it ``1234'', ``1235'' and ``1246'' respectively. Also I consider the following types of
+binomial auxiliary stage: $l = 0$ (do nothing), $l = 1$ (\ref{B2}), $l = 2$ (\ref{B4}) and $l = 3$
+(\ref{B6}). Specific values of error bound is depicted at fig.~\ref{modes} for different
+supplementary and main filter pairs. We can see that uniform precision is limited by error of 0.12\%
+for $\sigma^2 \approx 6.693$. Taking that value into consideration and also the fact that use of
+lower values of $l$ is preferable (better performance) I ended up with the following strategy.
+\begin{itemize}
+    \item If $\sigma^2 < 1.9$ then use single filter ``1234'' in direct mode---with coefficients
+        from (\ref{gamma}). Don't perform any rescaling ($n = 0$) and don't use any additional
+        filters ($l = 0$).
+    \item Otherwise if $1.9 \le \sigma^2 < 6.693$ then skip rescaling ($n = 0$) but use nontrivial
+        auxiliary filter.
+        \begin{itemize}
+            \item For $1.9 \le \sigma^2 < 2.8$   use filter ``1234'' with $\hat B^2$ ($l = 1$).
+            \item For $2.8 \le \sigma^2 < 4.4$   use filter ``1235'' with $\hat B^4$ ($l = 2$).
+            \item For $4.4 \le \sigma^2 < 6.693$ use filter ``1246'' with $\hat B^6$ ($l = 3$).
+        \end{itemize}
+    \item Else ($\sigma^2 \ge 6.693$) calculate number of shrinking/expanding stages as
+        \begin{equation}
+            n = 2 + \left\lfloor\log_4\frac{\sigma^2 + 0.7}{26.5}\right\rfloor,
+        \end{equation}
+        and scaled dispersion
+        \begin{equation}
+            \tilde\sigma^2 = \sigma^2\cdot4^{-n}.
+        \end{equation}
+        \begin{itemize}
+            \item If $\tilde\sigma^2 < 3.15 - 1.5\cdot4^{-n}$ then
+                use single filter ``1234'' ($l = 0$).
+            \item Else if $\tilde\sigma^2 < 5.3 - 5.2\cdot4^{-n}$ then
+                use filter ``1235'' with $\hat B^2$ ($l = 1$).
+            \item Otherwise use filter ``1246'' with $\hat B^4$ ($l = 2$).
+        \end{itemize}
+\end{itemize}
+There is a possibility that such strategy can result in negative main filter coefficients $C_i$
+(\ref{main}).  It's undesirable due to probability of overflow of initial $[0, 1]$ range. So I
+truncate such coefficients to zero. That increases error in certain areas but do not degrades global
+precision. The final error bound achieved by the full algorithm is displayed in fig.~\ref{error}.
+
+\pgfplotstableread{error.table}\errortable
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}
+        \begin{semilogxaxis} [ title = $E_{\max}(\sigma^2)$,
+                width = 18cm, height = 6cm, scaled ticks = false,
+                xmin = 1, xmax = 10000, xminorgrids = true, xmajorgrids = true,
+                ymin = 0, ymax = 0.003, yminorgrids = true, ymajorgrids = true,
+                yticklabel style = { overlay, /pgf/number format/.cd, fixed, fixed zerofill, precision = 3 },
+                ytick = { 0, 0.001, 0.002, 0.003 }, minor y tick num = 1 ]
+            \addlegendentry{$1234, l = 0$}
+            \addplot [ sharp plot, red ]
+                table[x = r2, y = l0-1234] {\errortable};
+            \addlegendentry{$1234, l = 1$}
+            \addplot [ sharp plot, densely dotted, red ]
+                table[x = r2, y = l1-1234] {\errortable};
+            \addlegendentry{$1235, l = 1$}
+            \addplot [ sharp plot, green ]
+                table[x = r2, y = l1-1235] {\errortable};
+            \addlegendentry{$1235, l = 2$}
+            \addplot [ sharp plot, densely dotted, green ]
+                table[x = r2, y = l2-1235] {\errortable};
+            \addlegendentry{$1246, l = 2$}
+            \addplot [ sharp plot, blue ]
+                table[x = r2, y = l2-1246] {\errortable};
+            \addlegendentry{$1246, l = 3$}
+            \addplot [ sharp plot, densely dotted, blue ]
+                table[x = r2, y = l3-1246] {\errortable};
+        \end{semilogxaxis}
+    \end{tikzpicture}
+    \caption{Error bound of different sets of filters.}
+    \label{modes}
+\end{figure}
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}
+        \begin{semilogxaxis} [ title = $E_{\max}(\sigma^2)$,
+                width = 18cm, height = 6cm, scaled ticks = false,
+                xmin = 1, xmax = 10000, xminorgrids = true, xmajorgrids = true,
+                ymin = 0, ymax = 0.0015, yminorgrids = true, ymajorgrids = true,
+                yticklabel style = { overlay, /pgf/number format/.cd, fixed, fixed zerofill, precision = 4 },
+                ytick = { 0, 0.0005, 0.001, 0.0015 }, minor y tick num = 4 ]
+            \addplot [ sharp plot, line width = 1pt, red ]
+                table[x = r2, y = final] {\errortable};
+        \end{semilogxaxis}
+    \end{tikzpicture}
+    \caption{Error bound of the full algorithm.}
+    \label{error}
+\end{figure}
+
+Previous plots show only range $\sigma^2 > 1$ but there is another region that requires special
+attention. Problem of small blur radius is discussed in the next section.
 
 \end{document}

@@ -1,5 +1,4 @@
 *.aux
 *.log
 *.pdf
-*.gnuplot
-*.table
+*.pgf-plot.*
