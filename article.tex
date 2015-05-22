@@ -5,6 +5,7 @@
 \usepackage{amsmath, wrapfig, pgfplots}
 
 \pgfplotsset{compat=1.9}
+\setlength\intextsep{0pt}
 
 \begin{document}
 
@@ -739,5 +740,125 @@ precision. The final error bound achieved by the full algorithm is displayed in 
 
 Previous plots show only range $\sigma^2 > 1$ but there is another region that requires special
 attention. Problem of small blur radius is discussed in the next section.
+
+
+\section{Small blur radius}
+
+The origin of the problem came from the fact that continuous Gaussian function
+$\Gamma(\sigma^2;\, x)$ doesn't have direct discrete counterpart for small $\sigma^2$. If we sample
+that function at integer arguments as we did in (\ref{gamma}) then we'll have problem with
+conservation. Fig.~\ref{norm} shows that sum of all samples diverges from 1 near zero.
+
+\begin{wrapfigure}{r}{0pt}
+    \begin{tikzpicture}
+        \begin{axis} [ title = $\sum_{k\in Z} \Gamma(\sigma^2;\, k)$,
+                width = 6cm, height = 6cm, domain = 0.01:1, samples = 256,
+                xmin = 0, xmax = 1, xminorgrids = true, xmajorgrids = true,
+                ymin = 0, ymax = 2, yminorgrids = true, ymajorgrids = true,
+            ]
+            \addplot [ sharp plot, line width = 1pt, red ] gnuplot {
+                2 * (0.5 + exp(-1/x/2) + exp(-4/x/2) + exp(-9/x/2) + exp(-16/x/2)) / sqrt(2*pi*x)
+            };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Norm of the sampled Gaussian kernel.}
+    \label{norm}
+\end{wrapfigure}
+
+One of the possible solutions is to use differential origin of the Gaussian function---diffuse
+equation
+\begin{equation}
+    \frac{\partial\Gamma(\tau;\, x)}{\partial\tau} =
+        \frac12 \frac{\partial^2\Gamma(\tau;\, x)}{\partial x^2}.
+\end{equation}
+We can replace space derivative with corresponding finite difference
+\begin{equation}
+    \frac{\partial\Gamma^d_n(\tau)}{\partial\tau} =
+        \frac12 [\Gamma^d_{n-1}(\tau) - 2\Gamma^d_n(\tau) + \Gamma^d_{n+1}(\tau)]
+\end{equation}
+and solve that equation. We get
+\begin{equation}
+    \Gamma^d_n(\tau) = I_n(\tau)e^{-\tau},
+\end{equation}
+where $I_n(\tau)$ is modified Bessel function
+\begin{equation}
+    I_n(\tau) = \sum_{k=0}^\infty \frac1{k!(k+n)!}\left(\frac\tau2\right)^{2k+n}.
+\end{equation}
+Such discrete Gaussian function preserves the main property of its continuous counterpart:
+combination of two filters with dispersion $\tau_1$ and $\tau_2$ is filter with dispersion
+$\tau = \tau_1 + \tau_2$.
+
+\begin{wrapfigure}{r}{0pt}
+    \begin{tikzpicture}
+        \begin{axis} [ spectrum, legend cell align = left,
+                legend style = { at = {(0.7, 0.5)}, anchor = center } ]
+            \addlegendentry{$G(\varphi)$}
+            \addplot [ sharp plot, line width = 1pt, red ] gnuplot {
+                exp(-0.5*(x*pi)^2)
+            };
+            \addlegendentry{$\Gamma^d(\sigma^2; \varphi)$}
+            \addplot [ sharp plot, line width = 1pt, green ] gnuplot {
+                exp(cos(x*pi) - 1)
+            };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Spectrum of different discrete Gaussian approximations for $\sigma^2 = 1$.}
+\end{wrapfigure}
+
+Fourier transform of that discrete kernel is
+\begin{equation}
+    \Gamma^d(\tau;\,\varphi) = e^{\tau(\cos\varphi - 1)}.
+\end{equation}
+Comparing it ($\tau = \sigma^2$) with (\ref{gauss}) we can see that diffusion-based discrete
+Gaussian significantly differs from sampled version even outside of problematic range
+$\sigma^2 < 0.5$. Due to that I decided to use sampled version for $\sigma^2 > 0.5$ and extend it
+to zero with simple 5-tap filter
+\begin{equation}
+    G^0_k = \left\{
+        \begin{array}{ll}
+            1 - \sigma^2 + 6\alpha\sigma^6,& k = 0;\\
+            \frac12\sigma^2 - 4\alpha\sigma^6,& k = \pm1;\\
+            \alpha\sigma^6,& k = \pm2;\\
+            0,& \text{otherwise};
+        \end{array}
+    \right.
+\end{equation}
+where $\alpha = 0.085$. Second derivative at zero of Fourier transform of that filter is $\sigma^2$
+and that guarantees that combination of such Gaussian filters is Gaussian if the resulting
+dispersion is sufficiently large.
+
+\begin{wrapfigure}{r}{0pt}
+    \begin{tikzpicture}
+        \begin{axis} [ width = 6cm, height = 6cm, domain = 0:1, samples = 256,
+                xmin = 0, xmax = 1, xminorgrids = true, xmajorgrids = true,
+                ymin = 0, ymax = 1, yminorgrids = true, ymajorgrids = true,
+                legend cell align = left ]
+            \addlegendentry{$k = 0$}
+            \addplot [ sharp plot, line width = 1pt, red] gnuplot {
+                x > 0.5 ? exp(-0/x/2) / sqrt(2*pi*x) : 1 - x + 6*0.085*x^3
+            };
+            \addlegendentry{$k = \pm1$}
+            \addplot [ sharp plot, line width = 1pt, green] gnuplot {
+                x > 0.5 ? exp(-1/x/2) / sqrt(2*pi*x) : x/2 - 4*0.085*x^3
+            };
+            \addlegendentry{$k = \pm2$}
+            \addplot [ sharp plot, line width = 1pt, blue] gnuplot {
+                x > 0.5 ? exp(-4/x/2) / sqrt(2*pi*x) : 0.085*x^3
+            };
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Resulting filter coefficients for $0 \le \sigma^2 \le 1$.}
+    \label{switch}
+\end{wrapfigure}
+
+Terms with $\alpha$ are needed to merge different kernels at $\sigma^2 = 0.5$ without major
+discontinuities. Fig.~\ref{switch} shows that junction is quite smooth and even first derivatives
+don't change much.
+
+Choosing Gaussian blur representation for small radii concludes the whole algorithm of cascaded
+approximation. Resulting algorithm is highly parallel and can be effectively adapted to vector
+architectures including modern graphics processors and vector instructions of general-purpose
+processors.
+
 
 \end{document}
