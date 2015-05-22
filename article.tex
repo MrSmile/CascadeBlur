@@ -10,7 +10,7 @@
 
 \title{Cascaded Approximation of Gaussian Blur}
 \author{Vabishchevich Nikolay}
-\date{May 19, 2015}
+\date{May 22, 2015}
 \maketitle
 
 
@@ -58,7 +58,7 @@ the name). Therefore our target problem is to efficiently calculate approximatio
 \begin{equation}
     R^\pm_p = \sum_{k\in Z} F^\pm_{p+k}G_k,
 \end{equation}
-where $F^\pm_p$ is the source function and $G_k$ is even gaussian kernel,
+where $F^\pm_p$ is the source function and $G_k$ is even Gaussian kernel,
 \begin{equation}\label{gamma}
     G_k = \Gamma(\sigma^2;\, k) \equiv
         \frac1{\sqrt{2\pi\sigma^2}}\exp\left\{-\frac{k^2}{2\sigma^2}\right\},
@@ -119,16 +119,16 @@ $n$ times. Hence its Fourier transform is
 }}
 \begin{wrapfigure}{r}{0pt}
     \begin{tikzpicture}
-        \begin{axis} [ spectrum, title = $G^+(\varphi)$ ]
+        \begin{axis} [ spectrum, title = $G(\varphi)$ ]
             \addplot [ sharp plot, line width = 1pt, red ] gnuplot {
                 exp(-8*(x*pi)^2)
             };
         \end{axis}
     \end{tikzpicture}
-    \caption{Gaussian spectrum (\ref{gauss}) for $\sigma = 4$.}
+    \caption{Gaussian spectrum (\ref{gauss}) for $\sigma^2 = 16$.}
 \end{wrapfigure}
 
-Going back to our gaussian filter (\ref{gamma}), its Fourier transform is another gaussian function
+Going back to our Gaussian filter (\ref{gamma}), its Fourier transform is another Gaussian function
 \begin{equation}\label{gauss}
     G(\varphi) \approx \exp\left\{-\frac{\sigma^2\varphi^2}2\right\}.
 \end{equation}
@@ -139,7 +139,7 @@ two subtasks described in the following sections.
 
 \section{Zeroing high frequency}
 
-The only way to avoid large filter kernels in approximation of gaussian blur with large radius is to
+The only way to avoid large filter kernels in approximation of Gaussian blur with large radius is to
 somehow reduce resolution before filtering. That can be done through successive steps of shrinking by
 factor of two, then applying main filter and then expanding twofold the same number of steps.
 Central main filter will be examined in the next section and this section concentrates on scaling.
@@ -385,14 +385,14 @@ small. Therefore final versions of rescale operators is
 
 \section{Main low-frequency filter}
 
-For last task of approximating central gaussian shape I've decided to use generic 9-tap filter as
+For last task of approximating central Gaussian shape I've decided to use generic 9-tap filter as
 the main workhorse. Under that name I imply even symmetric conservative convolutional filter of the
 following form
 \begin{equation}\label{main}
     K_k = \left\{
         \begin{array}{ll}
-            1 - \sum_{i=1}^4 C_i,& k = 0;\\
-            \frac12 C_i,& k = m_i;\\
+            1 - 2\sum_{i=1}^4 C_i,& k = 0;\\
+            C_i,& k = m_i;\\
             0,& \text{otherwise};
         \end{array}
     \right.
@@ -400,24 +400,24 @@ following form
 where $m_i$, $i=1, 2, 3, 4$, are sampling positions ($0 < m_1 < m_2 < m_3 < m_4$) and $C_i$ are
 coefficients. Fourier transform of this filter kernel is
 \begin{equation}
-    K(\varphi) = 1 - \sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)].
+    K(\varphi) = 1 - \sum_{i=1}^4 C_i[2 - 2\cos(m_i\varphi)].
 \end{equation}
 Further research shows that this filter isn't enough as central filter so I combine it with
 additional stage of even binomial filter $\hat B^{2l}$ ($B^0$ mean ``do nothing''). Therefore
-complete approximation of gaussian blur take the form of
+complete approximation of Gaussian blur take the form of
 \begin{equation}
     \hat G_{\text{apx}} = \hat Q^n\hat K\hat B^{2l}\hat P^n.
 \end{equation}
 Disregarding frequency crosstalk, diagonal part of that operator in Fourier space is
 \begin{equation}
-    G_{\text{apx}}(\varphi) = \left\{1 - \sum_{i=1}^4 C_i[1 - \cos(2^nm_i\varphi)]\right\}
+    G_{\text{apx}}(\varphi) = \left\{1 - \sum_{i=1}^4 C_i[2 - 2\cos(2^nm_i\varphi)]\right\}
         \cos^{2l}(2^{n-1}\varphi) \prod_{k=0}^{n-1} \cos^{10}(2^{k-1}\varphi).
 \end{equation}
 Outside of the region $[-\pi/2^n, \pi/2^n]$ that should be already near zero, so we focus only on
 center
 \begin{equation}
     G_{\text{apx}}\left(\frac\varphi{2^n}\right) =
-        \left\{1 - \sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right\}
+        \left\{1 - \sum_{i=1}^4 C_i[2 - 2\cos(m_i\varphi)]\right\}
         \cos^{2l}\frac\varphi2 \prod_{k=1}^n \cos^{10}\frac\varphi{2^{k+1}},
 \end{equation}
 where that expression should be near
@@ -441,24 +441,24 @@ then the problem is to minimize
 \end{equation*}
 \begin{equation*}
     \int_{-\pi}^\pi \left[g(\varphi) -
-        \left\{1 - \sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right\}p(\varphi)\right]^2
+        \left\{1 - \sum_{i=1}^4 C_i[2 - 2\cos(m_i\varphi)]\right\}p(\varphi)\right]^2
         w(\varphi) d\varphi =
 \end{equation*}
 \begin{equation}\label{lambda}
     \int_{-\pi}^\pi \left[g(\varphi) - p(\varphi) +
-        p(\varphi)\sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right]^2 w(\varphi) d\varphi,
+        p(\varphi)\sum_{i=1}^4 C_i[2 - 2\cos(m_i\varphi)]\right]^2 w(\varphi) d\varphi,
 \end{equation}
 where $w(\varphi) \approx 1$ is additional weight. As usual, calculating partial derivatives
 \begin{equation*}
     0 = \frac12\frac{\partial\lambda}{\partial C_k} =
     \int_{-\pi}^\pi \left[g(\varphi) - p(\varphi) +
-        p(\varphi)\sum_{i=1}^4 C_i[1 - \cos(m_i\varphi)]\right]
-        p(\varphi)w(\varphi) [1 - \cos(m_k\varphi)] d\varphi =
+        p(\varphi)\sum_{i=1}^4 C_i[2 - 2\cos(m_i\varphi)]\right]
+        p(\varphi)w(\varphi)[2 - 2\cos(m_k\varphi)] d\varphi =
 \end{equation*}
 \begin{equation}
-    \int_{-\pi}^\pi [g(\varphi) - p(\varphi)]p(\varphi)w(\varphi) [1 - \cos(m_k\varphi)] d\varphi +
+    \int_{-\pi}^\pi [g(\varphi) - p(\varphi)]p(\varphi)w(\varphi)[2 - 2\cos(m_k\varphi)] d\varphi +
     \sum_{i=1}^4 C_i\int_{-\pi}^\pi p^2(\varphi)w(\varphi)
-        [1 - \cos(m_i\varphi)][1 - \cos(m_k\varphi)] d\varphi.
+        [2 - 2\cos(m_i\varphi)][2 - 2\cos(m_k\varphi)] d\varphi.
 \end{equation}
 After defining
 \begin{equation}
@@ -470,13 +470,13 @@ and
 \end{equation}
 we can get
 \begin{equation}
-    0 = \frac1{2\pi}\frac{\partial\lambda}{\partial C_k} = 2[V_0 - V_{m_k} - U_0 + U_{m_k}] +
-        \sum_{i=1}^4 C_i[2U_0 - 2U_{m_i} - 2U_{m_k} + U_{m_i+m_k} + U_{|m_i-m_k|}].
+    0 = \frac1{4\pi}\frac{\partial\lambda}{\partial C_k} = 2[V_0 - V_{m_k} - U_0 + U_{m_k}] +
+        2\sum_{i=1}^4 C_i[2U_0 - 2U_{m_i} - 2U_{m_k} + U_{m_i+m_k} + U_{|m_i-m_k|}].
 \end{equation}
 Resulting symmetric system of four linear equations
 \begin{equation}
     \sum_{i=1}^4 C_i[2U_0 - 2U_{m_i} - 2U_{m_k} + U_{m_i+m_k} + U_{|m_i-m_k|}] =
-        2[U_0 - U_{m_k} - V_0 + V_{m_k}],
+        U_0 - U_{m_k} - V_0 + V_{m_k},
 \end{equation}
 can be solved through standard methods of linear algebra.
 
@@ -499,7 +499,7 @@ In that case
         \exp\left\{-\left[\frac{\sigma^2}{4^n} + \alpha\right]\frac{\varphi^2}2\right\}
         e^{-ip\varphi}d\varphi \approx \Gamma(\sigma^24^{-n} + \alpha;\, k),
 \end{equation}
-where $\Gamma$ is normalized gaussian function defined in (\ref{gamma}).
+where $\Gamma$ is normalized Gaussian function defined in (\ref{gamma}).
 
 Much better method is to choose $w(\varphi)$ such that
 \begin{equation}
@@ -517,7 +517,7 @@ where $D$ is effective rescale filter kernel with
 \begin{equation}
     D(\varphi) \equiv \prod_{k=1}^n \cos^{10}\frac\varphi{2^{k+1}}.
 \end{equation}
-Therefore $U_k$ can be calculated in the following way: construct gaussian function
+Therefore $U_k$ can be calculated in the following way: construct Gaussian function
 $\Gamma(\alpha;\, k)$, then apply filter $\hat D$, than apply binomial filter of order $2l$.
 Alternatively that can be written in operator notation as
 \begin{equation}
@@ -584,7 +584,7 @@ and give the following results
     D_3 &= (\0\0 17 - \0 126\cdot4^{-n} + \0 273\cdot16^{-n} - \0 164\cdot64^{-n}) / 12096.
 \end{align}
 Fig.~\ref{D} shows that such approximation noticeably differ from exact curve only at region near
-$\varphi = \pm\pi$ where the target gaussian is near zero anyway. Accurate approximation of
+$\varphi = \pm\pi$ where the target Gaussian is near zero anyway. Accurate approximation of
 effective rescale filter kernel concludes calculation of the main filter coefficients, and in the
 following section I study the task of choosing remaining parametrs $n$, $l$ and $m_i$.
 
@@ -596,7 +596,7 @@ estimate error and choose best in some sense. Key process here is calculation of
 of the possible ways is to use mean square error (\ref{lambda}) from previous section but I use
 more accurate method.
 
-Combined effect of all stages of gaussian blur approximation can be written in generic form
+Combined effect of all stages of Gaussian blur approximation can be written in generic form
 \begin{equation}
     R_i = \sum_{j\in Z} K_{ij}F_j,
 \end{equation}
@@ -693,7 +693,8 @@ precision. The final error bound achieved by the full algorithm is displayed in 
                 width = 18cm, height = 6cm, scaled ticks = false,
                 xmin = 1, xmax = 10000, xminorgrids = true, xmajorgrids = true,
                 ymin = 0, ymax = 0.003, yminorgrids = true, ymajorgrids = true,
-                yticklabel style = { overlay, /pgf/number format/.cd, fixed, fixed zerofill, precision = 3 },
+                yticklabel style = { overlay,
+                    /pgf/number format/.cd, fixed, fixed zerofill, precision = 3 },
                 ytick = { 0, 0.001, 0.002, 0.003 }, minor y tick num = 1 ]
             \addlegendentry{$1234, l = 0$}
             \addplot [ sharp plot, red ]
@@ -725,7 +726,8 @@ precision. The final error bound achieved by the full algorithm is displayed in 
                 width = 18cm, height = 6cm, scaled ticks = false,
                 xmin = 1, xmax = 10000, xminorgrids = true, xmajorgrids = true,
                 ymin = 0, ymax = 0.0015, yminorgrids = true, ymajorgrids = true,
-                yticklabel style = { overlay, /pgf/number format/.cd, fixed, fixed zerofill, precision = 4 },
+                yticklabel style = { overlay,
+                    /pgf/number format/.cd, fixed, fixed zerofill, precision = 4 },
                 ytick = { 0, 0.0005, 0.001, 0.0015 }, minor y tick num = 4 ]
             \addplot [ sharp plot, line width = 1pt, red ]
                 table[x = r2, y = final] {\errortable};
