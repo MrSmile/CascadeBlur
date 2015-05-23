@@ -1,6 +1,6 @@
 
 all:
-	pdflatex -shell-escape article.tex
+	pdflatex -shell-escape cascade-blur.tex
 
 clean:
-	rm -f *.aux *.log *.pdf *.gnuplot *.table
+	rm -f *.aux *.log *.pdf *.pgf-plot.*
